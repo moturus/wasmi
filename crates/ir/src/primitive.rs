@@ -345,7 +345,7 @@ impl ComparatorAndOffset {
     /// Converts the [`ComparatorAndOffset`] into an `u64` value.
     pub fn as_u64(&self) -> u64 {
         let hi = self.cmp as u64;
-        let lo = self.offset.to_i32() as u64;
+        let lo = self.offset.to_i32() as u32 as u64;
         (hi << 32) | lo
     }
 }
@@ -353,6 +353,17 @@ impl ComparatorAndOffset {
 impl From<ComparatorAndOffset> for UntypedVal {
     fn from(params: ComparatorAndOffset) -> Self {
         Self::from(params.as_u64())
+    }
+}
+
+#[test]
+fn branch_offset_roundtrip() {
+    for offset in [0, 32768, -32769, -78925, i32::MIN, i32::MAX] {
+        let original = ComparatorAndOffset::new(Comparator::I32Eq, BranchOffset::from(offset));
+        assert_eq!(
+            ComparatorAndOffset::from_u64(original.as_u64()),
+            Some(original)
+        );
     }
 }
 
