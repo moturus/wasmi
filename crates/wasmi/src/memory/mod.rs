@@ -47,11 +47,23 @@ impl Memory {
     ///
     /// If more than [`u32::MAX`] much linear memory is allocated.
     pub fn new(mut ctx: impl AsContextMut, ty: MemoryType) -> Result<Self, Error> {
+        let allocator = ctx
+            .as_context()
+            .store
+            .engine()
+            .config()
+            .memory_allocator
+            .clone();
         let (inner, mut resource_limiter) = ctx
             .as_context_mut()
             .store
             .store_inner_and_resource_limiter_ref();
-        let entity = CoreMemory::new(ty.core, &mut resource_limiter)?;
+        let entity = match allocator {
+            Some(allocator) => {
+                CoreMemory::new_with_allocator(ty.core, &mut resource_limiter, &*allocator)?
+            }
+            None => CoreMemory::new(ty.core, &mut resource_limiter)?,
+        };
         let memory = inner.alloc_memory(entity);
         Ok(memory)
     }

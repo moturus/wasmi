@@ -1,5 +1,7 @@
 use super::{EnforcedLimits, StackConfig};
 use crate::core::FuelCostsProvider;
+use alloc::sync::Arc;
+use wasmi_core::MemoryAllocator;
 use wasmparser::WasmFeatures;
 
 /// Configuration for an [`Engine`].
@@ -21,6 +23,7 @@ pub struct Config {
     compilation_mode: CompilationMode,
     /// Enforced limits for Wasm module parsing and compilation.
     limits: EnforcedLimits,
+    pub(crate) memory_allocator: Option<Arc<dyn MemoryAllocator>>,
 }
 
 /// The chosen mode of Wasm to Wasmi bytecode compilation.
@@ -50,11 +53,19 @@ impl Default for Config {
             fuel_costs: FuelCostsProvider::default(),
             compilation_mode: CompilationMode::default(),
             limits: EnforcedLimits::default(),
+            memory_allocator: None,
         }
     }
 }
 
 impl Config {
+    /// Selects an owned host allocator for defined and host-created memories.
+    /// Explicit `Memory::new_static` buffers retain their existing ownership.
+    pub fn with_memory_allocator(&mut self, allocator: Arc<dyn MemoryAllocator>) -> &mut Self {
+        self.memory_allocator = Some(allocator);
+        self
+    }
+
     /// Returns the default [`WasmFeatures`].
     fn default_features() -> WasmFeatures {
         let mut features = WasmFeatures::empty();

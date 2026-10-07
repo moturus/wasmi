@@ -212,4 +212,15 @@ use self::{
     store::Stored,
     table::{ElementSegment, ElementSegmentIdx, TableIdx},
 };
-pub use wasmi_core::{GlobalType, Mutability, ResourceLimiter, TrapCode, ValType, F32, F64, V128};
+pub use wasmi_core::{
+    GlobalType,
+    MemoryAllocator,
+    MemoryBuffer,
+    Mutability,
+    ResourceLimiter,
+    TrapCode,
+    ValType,
+    F32,
+    F64,
+    V128,
+};

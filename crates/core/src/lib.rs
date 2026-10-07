@@ -43,7 +43,7 @@ pub use self::{
     host_error::HostError,
     index_ty::IndexType,
     limiter::{LimiterError, ResourceLimiter, ResourceLimiterRef},
-    memory::{Memory, MemoryError, MemoryType, MemoryTypeBuilder},
+    memory::{Memory, MemoryAllocator, MemoryBuffer, MemoryError, MemoryType, MemoryTypeBuilder},
     table::{ElementSegment, ElementSegmentRef, Table, TableError, TableType},
     trap::{Trap, TrapCode},
     typed::{Typed, TypedVal},

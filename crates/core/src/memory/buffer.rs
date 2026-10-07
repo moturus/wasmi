@@ -1,6 +1,32 @@
 use crate::memory::MemoryError;
-use alloc::{slice, vec::Vec};
+use alloc::{boxed::Box, slice, vec::Vec};
 use core::{iter, mem::ManuallyDrop};
+
+/// An owned, nonmoving buffer for a linear memory.
+///
+/// # Safety
+/// The pointer must be non-null, exclusively owned, valid for reads/writes of
+/// `capacity()` bytes and stable until drop. Capacity must not exceed `isize::MAX`.
+/// No references to its bytes may exist outside the owning linear memory.
+pub unsafe trait MemoryBuffer: core::fmt::Debug + Send + Sync {
+    /// Returns the start of the reserved allocation.
+    fn data_ptr(&self) -> *mut u8;
+    /// Returns the byte capacity available for growth.
+    fn capacity(&self) -> usize;
+}
+
+/// Allocates owned buffers, including any host limits and reservation accounting.
+pub trait MemoryAllocator: core::fmt::Debug + Send + Sync {
+    /// Allocates at least `initial` bytes, bounded by the guest maximum if present.
+    ///
+    /// # Errors
+    /// Returns an error if host limits or allocation prevent creation.
+    fn allocate(
+        &self,
+        initial: usize,
+        maximum: Option<usize>,
+    ) -> Result<Box<dyn MemoryBuffer>, MemoryError>;
+}
 
 /// A byte buffer implementation.
 ///
@@ -29,18 +55,20 @@ pub struct ByteBuffer {
     capacity: usize,
     /// Whether the [`ByteBuffer`] was initialized from a `&'static [u8]` or a `Vec<u8>`.
     is_static: bool,
+    /// Keeps an external allocation alive without borrowing or leaking it.
+    owner: Option<Box<dyn MemoryBuffer>>,
 }
 
 // # Safety
 //
 // `ByteBuffer` is essentially an `enum`` of `Vec<u8>` or `&'static mut [u8]`.
-// Both of them are `Send` so this is sound.
+// Both are `Send`; an external owner must also implement `Send`.
 unsafe impl Send for ByteBuffer {}
 
 // # Safety
 //
 // `ByteBuffer` is essentially an `enum`` of `Vec<u8>` or `&'static mut [u8]`.
-// Both of them are `Sync` so this is sound.
+// Both are `Sync`; an external owner must also implement `Sync`.
 unsafe impl Sync for ByteBuffer {}
 
 /// Decomposes the `Vec<u8>` into its raw components.
@@ -85,6 +113,7 @@ impl ByteBuffer {
             len,
             capacity,
             is_static: false,
+            owner: None,
         })
     }
 
@@ -105,7 +134,29 @@ impl ByteBuffer {
             len: size,
             capacity: buffer.len(),
             is_static: true,
+            owner: None,
         })
+    }
+
+    /// Creates memory backed by an owned reservation, zeroing only visible bytes.
+    ///
+    /// # Errors
+    /// Returns an error for insufficient capacity or an invalid pointer.
+    pub fn new_owned(owner: Box<dyn MemoryBuffer>, size: usize) -> Result<Self, MemoryError> {
+        let capacity = owner.capacity();
+        let ptr = owner.data_ptr();
+        if size > capacity || capacity > isize::MAX as usize || ptr.is_null() {
+            return Err(MemoryError::OutOfSystemMemory);
+        }
+        let mut buffer = Self {
+            ptr,
+            len: size,
+            capacity,
+            is_static: true,
+            owner: Some(owner),
+        };
+        buffer.data_mut().fill(0);
+        Ok(buffer)
     }
 
     /// Grows the byte buffer to the given `new_size`.
@@ -206,6 +257,7 @@ impl ByteBuffer {
 impl Drop for ByteBuffer {
     fn drop(&mut self) {
         self.get_vec().map(ManuallyDrop::into_inner);
+        drop(self.owner.take());
     }
 }
 

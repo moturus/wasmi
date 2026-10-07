@@ -18,6 +18,7 @@ pub use self::{
         store_wrap,
         store_wrap_at,
     },
+    buffer::{MemoryAllocator, MemoryBuffer},
     error::MemoryError,
     ty::{MemoryType, MemoryTypeBuilder},
 };
@@ -46,7 +47,7 @@ impl Memory {
         memory_type: MemoryType,
         limiter: &mut ResourceLimiterRef<'_>,
     ) -> Result<Self, MemoryError> {
-        Self::new_impl(memory_type, limiter, ByteBuffer::new)
+        Self::new_impl(memory_type, limiter, |size, _| ByteBuffer::new(size))
     }
 
     /// Creates a new static [`Memory`] with the given `memory_type`.
@@ -63,15 +64,29 @@ impl Memory {
         limiter: &mut ResourceLimiterRef<'_>,
         buffer: &'static mut [u8],
     ) -> Result<Self, MemoryError> {
-        Self::new_impl(memory_type, limiter, |initial_size| {
+        Self::new_impl(memory_type, limiter, |initial_size, _| {
             ByteBuffer::new_static(buffer, initial_size)
+        })
+    }
+
+    /// Creates a memory using an owned host buffer.
+    ///
+    /// # Errors
+    /// Returns an error if the limiter or allocator rejects creation.
+    pub fn new_with_allocator(
+        memory_type: MemoryType,
+        limiter: &mut ResourceLimiterRef<'_>,
+        allocator: &dyn MemoryAllocator,
+    ) -> Result<Self, MemoryError> {
+        Self::new_impl(memory_type, limiter, |initial, maximum| {
+            ByteBuffer::new_owned(allocator.allocate(initial, maximum)?, initial)
         })
     }
 
     fn new_impl(
         memory_type: MemoryType,
         limiter: &mut ResourceLimiterRef<'_>,
-        make_buffer: impl FnOnce(usize) -> Result<ByteBuffer, MemoryError>,
+        make_buffer: impl FnOnce(usize, Option<usize>) -> Result<ByteBuffer, MemoryError>,
     ) -> Result<Self, MemoryError> {
         let Ok(min_size) = memory_type.minimum_byte_size() else {
             return Err(MemoryError::MinimumSizeOverflow);
@@ -103,7 +118,7 @@ impl Memory {
             }
         }
 
-        let bytes = match make_buffer(min_size) {
+        let bytes = match make_buffer(min_size, max_size) {
             Ok(buffer) => buffer,
             Err(error) => {
                 if let Some(limiter) = limiter.as_resource_limiter() {
