@@ -5,8 +5,10 @@ This branch is based on upstream Wasmi 1.1.0 at
 original workspace.
 
 The changes preserve negative branch offsets when packing the IR comparator,
-and add an owned, nonmoving linear-memory allocator interface. Javy provides
-the Motor reservation implementation; Wasmi itself remains platform independent.
+and add an owned, nonmoving linear-memory allocator interface. Its buffers
+arrive zeroed and Wasmi never writes zeros into them, so growth does not touch
+lazily mapped pages. Javy provides the Motor reservation implementation; Wasmi
+itself remains platform independent.
 Default Vec and caller-owned static memory behavior and no-std support remain.
 
 `./motor-test.sh` runs the IR regression, owned-memory lifetime/growth/error

@@ -7,6 +7,8 @@ use core::{iter, mem::ManuallyDrop};
 /// # Safety
 /// The pointer must be non-null, exclusively owned, valid for reads/writes of
 /// `capacity()` bytes and stable until drop. Capacity must not exceed `isize::MAX`.
+/// Every byte must read as zero when allocated: Wasmi never initializes owned
+/// buffers, so growth leaves untouched lazily mapped pages unbacked.
 /// No references to its bytes may exist outside the owning linear memory.
 pub unsafe trait MemoryBuffer: core::fmt::Debug + Send + Sync {
     /// Returns the start of the reserved allocation.
@@ -138,7 +140,7 @@ impl ByteBuffer {
         })
     }
 
-    /// Creates memory backed by an owned reservation, zeroing only visible bytes.
+    /// Creates memory backed by an owned, already zeroed reservation.
     ///
     /// # Errors
     /// Returns an error for insufficient capacity or an invalid pointer.
@@ -148,15 +150,13 @@ impl ByteBuffer {
         if size > capacity || capacity > isize::MAX as usize || ptr.is_null() {
             return Err(MemoryError::OutOfSystemMemory);
         }
-        let mut buffer = Self {
+        Ok(Self {
             ptr,
             len: size,
             capacity,
             is_static: true,
             owner: Some(owner),
-        };
-        buffer.data_mut().fill(0);
-        Ok(buffer)
+        })
     }
 
     /// Grows the byte buffer to the given `new_size`.
@@ -203,7 +203,10 @@ impl ByteBuffer {
         }
         let len = self.len();
         self.len = new_size;
-        self.data_mut()[len..new_size].fill(0x00_u8);
+        // Owned bytes beyond the old length are still the allocator's zeros.
+        if self.owner.is_none() {
+            self.data_mut()[len..new_size].fill(0x00_u8);
+        }
         Ok(())
     }
 
