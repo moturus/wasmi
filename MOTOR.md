@@ -12,6 +12,6 @@ itself remains platform independent.
 Default Vec and caller-owned static memory behavior and no-std support remain.
 
 `./motor-test.sh` runs the IR regression, owned-memory lifetime/growth/error
-regressions and no-std check with the adjacent Motor repository's selected
-Rust toolchain. These tests belong here because they test this implementation.
+regressions and no-std check; set `RUSTUP_TOOLCHAIN` to the Motor Rust
+toolchain first. These tests belong here because they test this implementation.
 There is no Motor-repository test dependency on a `/tmp` checkout.
